@@ -114,8 +114,36 @@ This document is organized as follows. In Chapter~\ref{building-blocks}, we desc
 
 If you have heard of blockchain then you have indirectly heard of Bitcoin, the decentralized peer-to-peer currency network with some fancy features such as the ability to transfer real value over virtual channels. This is because Bitcoin is the first widespread use of the blockchain, which is essentially a {\em decentralized tamper-resistant append-only database} of transactions (sometimes also referred to as a {\em ledger}). Let us elaborate on this in more detail in the following sections. 
 
-\section{Blockchain as a Finite-State Machine}
-Formally, a blockchain represents a finite-state machine with state changes encoded in blocks and a copy of a blockchain representing a snapshot of this state machine. There are certain rules that must be followed to encode a valid state change. These are encoded in transactions. Additionally, older snapshots are considered tamper-resistant while fresh copies may be susceptible to deletion or tampering, depending on the computational power of the attacker. However, after the snapshot becomes sufficiently old, it can be considered as tamper-proof for all practical purposes. The rules of the transactions ensure that if all honest nodes start with the same initial state and apply the same transactions then they will have the same snapshots at any time. The task here is to ensure that the transactions are always applied in the right order. This is a consensus problem, and is solved in Bitcoin using a concept called proof-of-work -- the solution to a hard puzzle. The idea is that not everyone gets to choose which set of transactions to apply to reach the next valid snapshot, but only by someone who has invested a large amount of computing power and provides the proof on a first-come-first-serve basis. Snapshots are connected -- each block is linked to the previous one via a cryptographic hash so that if someone else provides a proof-of-work and the network accepts it, then all existing work for ``winning'' this block is invalidated and the contenders have to start again with the newly accepted block as the starting point. To incentivize nodes to expend work, each accepted snapshot comes with some reward in the form of tokens generated (additional states that benefit the node solving the puzzle). 
+\section{Blockchain and Boxes}
+
+
+Define $F$ to be the set of mappings $\mathbb{Z}\times\mathbb{Z} \mapsto \{-1, 0, 1\}$ over the integers. 
+Intuitively, each integer pair represents a `box' of type (public-key, amount). Each element from $F$ maps the pairs of such integers (i.e., all boxes) to one of three states: $-1, 0, 1$, indicating that the corresponding box is respectively {\em Unused} (never used), {\em Closed} (contains funds) and {\em Opened} (funds have been used).
+A blockchain is an infinite sequence $f_0, f_1, f_2, \ldots \in F$ of functions from $F$ applied iteratively on $\mathbb{Z}$ such that: % each $f_i$ satisfies the following:
+\begin{enumerate}
+	\item $f_i \neq f_{i+1}$ (there must be at least one state change in the boxes).
+	\item $\forall (x, y) \in \mathbb{Z}: f_i(x, y) \leq f_{i+1}(x, y)$ (state cannot decrease).
+	\item $\forall (x, y) \in \mathbb{Z}: f_i(x, y)+1 \geq f_{i+1}(x, y)$ (state cannot increase > 1).
+\end{enumerate}
+
+$f_0$ is called the {\em genesis mapping} or {\em genesis state}. Each mapping $f_i$ represents a snapshot of the system at iteration $i$, denoted $f_i(\mathbb{Z})$, which indicates the state of each box. A {\em block} $i$ gives the deltas between two successive states $(f_{i+1}, f_{i})$ and is essentially defines a set of boxes to open and close. Formally, {\em block}$_{i}$ is the set $\{(x, y)|f_{i+1}(x, y)\neq f_i(x, y)\}$. The transformation rules ensure that there is a unique block for each iteration. While this is enough to define a generic blockchain, Bitcoin has some additional rules:
+
+\begin{enumerate}
+	\item For any block $b_{i}$, $$\sum_{(x, y)\in b_{i}} y\cdot f_{i+1}(x, y) +\sum_{(x, y)\in b_{i}} y\cdot f_{i}(x, y) \leq  r(i),$$ for some {\em reward} function $r$.
+	
+	Note that $\sum_{(x, y)\in b_{i}} y\cdot f_{i}(x, y)$ is the negative of the sum of amount in all the boxes to be closed in this iteration and $\sum_{(x, y)\in b_{i}} y\cdot f_{i+1}(x, y)$ is the sum for the boxes to be opened. Thus, the LHS is the amount of bitcoins `created' in this block minus the amount bitcoins `destroyed'. The inequality says that the net amount of bitcoins created in a block cannot be more than the reward. 
+	\item For each box $(x, y)\in b_i$, there is a {\em transaction} that acts as the {\em witness} of opening or	 closing that box. This is discussed below and in later sections.
+\end{enumerate}
+
+Given some initial state $f_i$, the block $i+1$ is created using a partially ordered set of {\em transactions} which encode changes from $f_i$. A transaction encodes 
+
+%For example, suppose the genesis function is such that $f(\mathbb{Z}) = 0\}$ . Then 
+
+%A block is actually a {\em partially ordered set} with the ordering rule that 
+
+%constructed from transactions such that the with some 
+
+There are certain rules that must be followed to encode a valid state change. These are encoded in transactions. Additionally, older snapshots are considered tamper-resistant while fresh copies may be susceptible to deletion or tampering, depending on the computational power of the attacker. However, after the snapshot becomes sufficiently old, it can be considered as tamper-proof for all practical purposes. The rules of the transactions ensure that if all honest nodes start with the same initial state and apply the same transactions then they will have the same snapshots at any time. The task here is to ensure that the transactions are always applied in the right order. This is a consensus problem, and is solved in Bitcoin using a concept called proof-of-work -- the solution to a hard puzzle. The idea is that not everyone gets to choose which set of transactions to apply to reach the next valid snapshot, but only by someone who has invested a large amount of computing power and provides the proof on a first-come-first-serve basis. Snapshots are connected -- each block is linked to the previous one via a cryptographic hash so that if someone else provides a proof-of-work and the network accepts it, then all existing work for ``winning'' this block is invalidated and the contenders have to start again with the newly accepted block as the starting point. To incentivize nodes to expend work, each accepted snapshot comes with some reward in the form of tokens generated (additional states that benefit the node solving the puzzle). 
 
 The rules encoding state changes are hardwired into the peer-to-peer nodes so that once a majority of them are running the code and act honestly, we can be ensured that block updates follow the correct rules. Blockchain can tolerate a high number of corrupt nodes (those controlled by an attacker) -- close to 40\%. 
 
@@ -272,7 +300,7 @@ To ensure consistency and fast consensus, not everyone gets to choose which tran
 \label{sec:verify}
 Miners are nodes that propose a set of transactions to commit along with a proof that they have put in a certain minimum amount of work (in the form of CPU cycles) after the last update. The network selects the first solution. 
 
-A miner confirms new transactions as follows: 
+Roughly, the process of confirming transactions is as follows: 
 \begin{enumerate}
 	\item A bunch of unconfirmed transactions along with one reward transaction %\footnote{The reward transaction has no inputs. It takes the fees and the block reward.} 
 	(known as the \emph{coinbase transaction}) are combined into a `block'.
@@ -290,39 +318,19 @@ If the output of the hash contains at least a specified number of leading zeros,
 
 \paragraph{Transaction pool management:} Each client maintains a pool of unverified (but valid) transactions. An element is removed from this pool when that transaction gets included in a mined block. This ensures that even if a transaction is not included in an immediate block, it is kept in the pool until it gets mined. If a transaction is not confirmed within 72 hours then it forgotten. 
 
-\section{Security and Privacy} 
-
-
-For security, we require the following: (1) The inability of an attacker to send bitcoins from addresses whose private key is not known, (2) The inability of an attacker to double-spend bitcoins or reverse a transaction, and (3) The inability of an attacker to exclude certain valid transactions from confirming. The first requirement is satisfied if the underlying signature scheme is existentially unforgeable. The second and third requirements, formalized respectively as {\em persistence} and {\em liveness} in~\cite{Garay2015}, can be achieved if the underlying proof-of-work (PoW) based consensus system satisfies the following two properties~\cite{Garay2015}:
-\begin{enumerate}
-	\item {\em Common prefix:} If all honest participants remove the top (newer) $k$ blocks from their chains for a large enough $k$ then all of them will share a common prefix. In other words, the chains held by honest miners will either be identical or be contained in the others.
-	\item {\em Chain quality:} There is some minimal integer $\lambda\geq 1$ such that, if the combined computing power of honest parties is $\lambda$ times that of the adversary, then a non-negligible amount of blocks generated by honest parties will make it into the chain. 
-\end{enumerate}
-
-If the difficult level is sufficiently high and the network synchronization time (time between a new block being injected and reaching all participants) is short compared to average block generation period (10 minutes in Bitcoin) then the protocol offers high security. On the other hand, security is weakened if any of the following conditions hold:
-(1) overall computing power is low, (2) blocks are generated too fast, or (3) network takes long time to synchronize. 
-
-
-We additionally have some Bitcoin specific attacks:
-\begin{enumerate}
-	\item {\em Reused R-values:} The underlying signatures ECDSA can be broken if the same randomness is used in two different signatures~\cite{reusedRvalues}. Thus, implementations must take additional care to use true randomness or message-specific one (computed as a hash of the message).
-	%\item {\em Attack on cumulative difficulty:} Since the initial difficulty is small in the first two years of Bitcoin, a powerful attacker may be able to forge a chain longer than the current one  with higher cumulative difficulty. This attack becomes more difficult as the cumulative difficulty increases.
-	\item {\em Centralization of mining:} If a majority of the mining power is concentrated in a few pools, then they can collude and attack bitcoin. Part of the reason for this threat is the susceptibility to ASIC mining~\cite{asic}.
-	\item {\em Denial of service attacks:} Certain attacks are based on miners forcing other miners to skip block validation by generating large blocks or ones that require expensive verification. Thus, they could send wrong data that will result in other miners to later lose their work.
-	\item {\em Malleability:} The signature encoding in Bitcoin is such that if a certain bits of the signature are toggled, the result is still a valid signature (this is due to the underlying ECDSA scheme). This allows miners to mine a transaction whose is different from the original, while keeping everything else (i.e., inputs/outputs) same. If a bitcoin service uses the transaction hash to monitor sent funds, then it could lose funds~\cite{gox}.
-\end{enumerate}
-
-\textbf{Privacy:} The addresses serve as pseudonyms and provide some anonymity. However, bitcoin does not provide true anonymity because the inputs are linked to the previous outputs via a reference.
-
+%%\paragraph{Selecting a unique chain:} One of the issues in Bitcoin is to select the ``valid'' chain given more than one contender. It is conceivable that an attacker (or network failure) can cause two or more competing chains to be temporar
+%
+%simultaneously present and dividntire network, with some holding each version. %is able to generate a chain longer than the one that honest nodes hold. 
 
 \section{Scalability}
 
-Before discussing scalability, we describe block construction in more detail. A block consists of a variable-size {\em payload} containing the actual transactions in a Merkle tree structure and a fixed-size {\em header} describing the payload. The header contains: 
+Before discussing scalability, we describe the blockchain structure in more detail.
+
+\textbf{Block Structure:} A block consists of a variable-size {\em payload} containing the actual transactions in a Merkle tree structure and a fixed-size {\em header} describing the payload. The header contains: 
 \begin{enumerate}
 	\item The root hash of the Merkle tree of transactions.
 	\item The current block index and the previous block-header hash.
-	\item The nonce and the corresponding difficulty level.	
-	\item A timestamp.
+	\item The nonce, the corresponding difficulty level and a timestamp.
 \end{enumerate}
 
 Earlier we stated (for simplicity) that the PoW is computed as a hash of the entire block. However, this is not true. The PoW is computed only on the header and not the payload. This enables nodes to verify PoW using just header information, while the payload can be verified later via the root hash. 
@@ -336,10 +344,44 @@ Earlier we stated (for simplicity) that the PoW is computed as a hash of the ent
 
 [...]
 
+\section{Security and Privacy} 
+
+%Before describing se 
+
+At the heart of Bitcoin is the concept of the blockchain, a distributed global ledger of transactions that each node holds. The goal of the protcol is to ensure {\em eventual consistency}; if the network is completely synchronized then all nodes will have an identical copy of the blockchain. Thus, the primary goal of Bitcoin is to select the ``valid'' chain given more than one contenders. 
+
+
+\paragraph{Selecting a unique chain:} It is conceivable that an attacker (or network failure) can cause two or more competing chains to be temporarily (a {\em soft-fork}) or permanently (a {\em hard-fork}) present in the system. The nodes should be able to quickly reject the ``invalid'' one. The protocol selects the chain with the highest cumulative difficulty, rather then the longest one. 
+
+\paragraph{Difficulty level adjustment:} Difficulty is a measure of the hardness of the puzzle and can be quantified by $x$, the maximum possible number representable with that many leading zeros. 
+A difficulty level of $d$ implies that $d = 2^{256}/x$. Thus, the smaller $x$ is, the larger the difficulty. The difficulty is adjusted every 2016 blocks based on the time it took to find the previous 2016 blocks. At the desired rate of one block each 10 minutes, 2016 blocks would take exactly two weeks to find. If the previous 2016 blocks took more than two weeks to find, the difficulty is reduced. If they took less than two weeks, the difficulty is increased. The change in difficulty is in proportion to the amount of time over or under two weeks the previous 2016 blocks took to find.
+
+
+\paragraph{Security Requirements:} For security, we require the following: (1) The inability of an attacker to send bitcoins from addresses whose private key is not known, (2) The inability of an attacker to double-spend bitcoins or reverse a transaction, and (3) The inability of an attacker to prevent some valid transactions from confirming. The first requirement is satisfied if the underlying signature scheme is existentially unforgeable. The second and third requirements, formalized respectively as {\em persistence} and {\em liveness} in~\cite{Garay2015}, can be achieved if the underlying proof-of-work (PoW) based consensus system satisfies the following two properties~\cite{Garay2015}:
+\begin{enumerate}
+	\item {\em Common prefix:} If all honest participants remove the top (newer) $k$ blocks from their chains for a large enough $k$ then all of them will share a common prefix. In other words, the chains held by honest miners will either be identical or be contained in the others.
+	\item {\em Chain quality:} There is some minimal integer $\lambda\geq 1$ such that, if the combined computing power of honest parties is $\lambda$ times that of the adversary, then a non-negligible amount of blocks generated by honest parties will make it into the chain. 
+\end{enumerate}
+
+If the difficulty level is sufficiently high and the network synchronization time (time between a new block being injected and reaching all participants) is short compared to average block generation period (10 minutes in Bitcoin) then the protocol offers high security. On the other hand, security is weakened if any of the following conditions hold~\cite{Garay2015}:
+(1) overall computing power is low, (2) blocks are generated too fast, or (3) network takes long time to synchronize. 
+
+\paragraph{Attacks on Implementation:} Following are attacks specific to Bitcoin:
+\begin{enumerate}
+	\item {\em Reused R-values:} The underlying signatures ECDSA can be broken if the same randomness is used in two different signatures~\cite{reusedRvalues}. Thus, implementations must take additional care to use true randomness or message-specific one (computed as a hash of the message).
+	%\item {\em Attack on cumulative difficulty:} Since the initial difficulty is small in the first two years of Bitcoin, a powerful attacker may be able to forge a chain longer than the current one  with higher cumulative difficulty. This attack becomes more difficult as the cumulative difficulty increases.
+	\item {\em Centralization of mining:} If a majority of the mining power is concentrated in a few pools, then they can collude and attack bitcoin. Part of the reason for this threat is the susceptibility to ASIC mining~\cite{asic}.
+	\item {\em Denial of service attacks:} Certain attacks are based on miners forcing other miners to skip block validation by generating large blocks or ones that require expensive verification. Thus, they could send wrong data that will result in other miners to later lose their work.
+	\item {\em Malleability:} The signature encoding in Bitcoin is such that if a certain bits of the signature are toggled, the result is still a valid signature (this is due to the underlying ECDSA scheme). This allows miners to mine a transaction whose is different from the original, while keeping everything else (i.e., inputs/outputs) same. If a bitcoin service uses the transaction hash to monitor sent funds, then it could lose funds~\cite{gox}.
+\end{enumerate}
+
+\paragraph{Privacy:} The addresses serve as pseudonyms and provide some anonymity. However, bitcoin does not provide true anonymity because the inputs are linked to the previous outputs via a reference.
+
+
+
 % dicuss about block size, bandwidth requirements
 % discuss minimal state, why we need to store utxo
 % why we need history
-
 
 \chapter{A Blockchain System Design}             % chapter 2
 \section{Introduction}     
